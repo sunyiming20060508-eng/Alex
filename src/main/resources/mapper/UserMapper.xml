@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.linli.mapper.UserMapper">
+
+    <!-- PUT /api/user/me：三个字段都可选，谁传更新谁。Service 保证不会全为 null 时进来。 -->
+    <update id="updateProfile" parameterType="com.linli.entity.User">
+        update user
+        <set>
+            <if test="nickName != null">nick_name = #{nickName},</if>
+            <if test="icon != null">icon = #{icon},</if>
+            <if test="gender != null">gender = #{gender},</if>
+        </set>
+        where id = #{id}
+    </update>
+
+    <!-- 注册专用：手机号必填，昵称和密码都是"传了才写这一列"，没传的继续走表默认值。
+         不能复用 loginOrCreate 那条只插 phone 的 @Insert——那样密码会静默丢掉。 -->
+    <insert id="insertRegistered" parameterType="com.linli.entity.User"
+            useGeneratedKeys="true" keyProperty="id">
+        insert into user
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            phone,
+            <if test="nickName != null">nick_name,</if>
+            <if test="password != null">password,</if>
+        </trim>
+        values
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            #{phone},
+            <if test="nickName != null">#{nickName},</if>
+            <if test="password != null">#{password},</if>
+        </trim>
+    </insert>
+
+</mapper>

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.linli.mapper.BlogCommentMapper">
+
+    <select id="pageByBlog" resultType="com.linli.entity.BlogComment">
+        select c.id, c.blog_id, c.user_id, c.content, c.create_time,
+               u.nick_name as author_name, u.icon as author_icon
+        from blog_comment c
+        left join user u on u.id = c.user_id
+        where c.blog_id = #{blogId}
+        order by c.id desc
+        limit #{offset}, #{limit}
+    </select>
+
+    <!-- 和分页完全同一条 join，只是按 id 取一条：保证刚发的评论在"发出去的响应"和"列表里"长得一样 -->
+    <select id="getById" resultType="com.linli.entity.BlogComment">
+        select c.id, c.blog_id, c.user_id, c.content, c.create_time,
+               u.nick_name as author_name, u.icon as author_icon
+        from blog_comment c
+        left join user u on u.id = c.user_id
+        where c.id = #{id}
+    </select>
+
+    <select id="countByBlog" resultType="long">
+        select count(*) from blog_comment where blog_id = #{blogId}
+    </select>
+
+
+    <!--
+      我发出的评论：多带一层 join，把"这条挂在谁的哪篇笔记下"一起取回来。
+      少了这两个字段，自己的评论列表就是一堆没有上文的断句。
+      blog 用内连接：笔记被彻底删掉时这条评论也就不该再出现在列表里（点进去会是 404）。
+    -->
+    <select id="pageByAuthor" resultType="com.linli.entity.BlogComment">
+        select c.id, c.blog_id, c.user_id, c.content, c.create_time,
+               u.nick_name as author_name, u.icon as author_icon,
+               b.title as blog_title, bu.nick_name as blog_author_name
+        from blog_comment c
+                 left join user u on u.id = c.user_id
+                 join blog b on b.id = c.blog_id
+                 left join user bu on bu.id = b.user_id
+        where c.user_id = #{userId}
+        order by c.id desc
+        limit #{offset}, #{limit}
+    </select>
+
+    <select id="countByAuthor" resultType="long">
+        select count(*) from blog_comment where user_id = #{userId}
+    </select>
+</mapper>

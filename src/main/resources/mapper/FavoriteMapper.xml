@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.linli.mapper.FavoriteMapper">
+
+    <!--
+      一页商家里"我收藏了哪些"。ids 由 Service 保证非空（空列表直接返回空集，不发 SQL），
+      所以这里不需要 if 兜底；写成一条 IN 而不是逐条 count，是为了让列表页每页只多一次查询。
+    -->
+    <select id="filterFavoriteShopIds" resultType="long">
+        select shop_id
+        from user_favorite
+        where user_id = #{userId}
+        and shop_id in
+        <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+    </select>
+
+</mapper>

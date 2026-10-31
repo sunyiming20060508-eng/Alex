@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.linli.mapper.BlogLikeMapper">
+
+    <!-- 详情页/列表页标"我点过哪几篇"：一次 IN 查回来，不逐条问数据库。 -->
+    <select id="listLikedBlogIds" resultType="long">
+        select blog_id from blog_like
+        where user_id = #{userId}
+        and blog_id in
+        <foreach collection="blogIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
+</mapper>

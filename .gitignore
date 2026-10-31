@@ -1,0 +1,17 @@
+# 构建产物
+/target/
+*.class
+
+# IDE 个人配置（不要上传）
+/.idea/
+*.iml
+
+# 运行时数据（日志里有 SQL/token，上传目录是用户内容）
+/logs/
+/uploads/
+
+# 本地专用配置与临时文件
+/application-local.yml
+*.log
+*.log.gz
+/D

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.linli.mapper.OrderDetailMapper">
+
+    <!-- 一次多值插入，不循环单条。
+         useGeneratedKeys 在 foreach 批量插入上要把键回填到集合的每个元素里，
+         所以 keyProperty 必须写成 list.id（@Param("list") 的前缀不能省），
+         只写 id 会静默回填失败——下单响应里 details[].id 一直是 null 就是这个原因。 -->
+    <insert id="insertBatch" useGeneratedKeys="true" keyProperty="list.id">
+        insert into order_detail (order_id, goods_id, shop_id, goods_name, goods_cover, quantity, unit_price, subtotal)
+        values
+        <foreach collection="list" item="d" separator=",">
+            (#{d.orderId}, #{d.goodsId}, #{d.shopId}, #{d.goodsName}, #{d.goodsCover}, #{d.quantity},
+             #{d.unitPrice}, #{d.subtotal})
+        </foreach>
+    </insert>
+
+    <!-- 列表页一次取回本页所有订单的明细，Service 里 groupingBy 回填，消灭 N+1 -->
+    <select id="listByOrderIds" resultType="com.linli.entity.OrderDetail">
+        select * from order_detail
+        where order_id in
+        <foreach collection="orderIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        order by id asc
+    </select>
+</mapper>

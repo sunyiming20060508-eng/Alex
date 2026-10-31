@@ -1,0 +1,18 @@
+# 生产：不打印验证码（继承 base 的 log-code=false）、不吐依赖细节（继承 show-details=never）、
+# 不注册跨域（CORS_ALLOWED_ORIGINS 留空）、日志只到 info。
+#
+# **凭证一律不给可用的默认值**。这里刻意写成 `${MYSQL_PASSWORD:}`（缺失即空串），
+# 因为 Spring 的占位符**没有** `${VAR:?msg}` 这种语法——那是 shell/Maven 的写法，
+# Spring 会把 `:?后面整段`当成默认值，于是"变量没配"反而解析出一个非空的垃圾密码，
+# 应用照常启动、日志一路 green，直到第一个请求打库才炸（实测踩过，见 WORKLOG S-107）。
+# 真正的 fail-fast 由 config/ProdSecretsGuard 承担：它把"空串/空格"也当缺失，缺就直接抛
+# IllegalStateException 让进程停在这个原因上，和 OSS 适配器那条 fail-fast 同一严格程度。
+spring:
+  datasource:
+    password: ${MYSQL_PASSWORD:}
+  data.redis:
+    password: ${REDIS_PASSWORD:}
+
+logging:
+  level:
+    com.linli.service: info

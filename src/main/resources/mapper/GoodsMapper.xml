@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.linli.mapper.GoodsMapper">
+
+    <!--
+      下单时一次把要买的套餐全读回来。原来是循环里逐个 getById，N 个商品就是 N 次往返；
+      这一条 IN 把它们并成一次。带的列和 getById 完全一致（含 join 出来的 shop_name），
+      因为 Service 那边要算价、判下架、判归属，不能是另一副形状。
+      顺序不保证，所以调用方按 id 建 Map，再按下单明细的顺序取。
+    -->
+    <select id="listByIds" resultType="com.linli.entity.Goods">
+        select g.*, s.name as shop_name
+        from goods g
+        left join shop s on s.id = g.shop_id
+        where g.id in
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
+    <!--
+      回补库存要 join orders 并带上前置状态条件：
+      "查出超时单 → 取消 → 回补"三步之间用户可能刚好付款成功，那一单不该被回补。
+    -->
+    <update id="restoreStockByOrderIds">
+        update goods g
+        join order_detail d on d.goods_id = g.id
+        join orders o on o.id = d.order_id
+        set g.stock = g.stock + d.quantity
+        where o.status = #{cancelledStatus}
+          and d.order_id in
+        <foreach collection="orderIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </update>
+</mapper>

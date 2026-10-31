@@ -1,0 +1,10 @@
+# 构建上下文里不该出现的东西：target 会让镜像里的 mvn 重新构建却带着本机产物，
+# node_modules/uploads/logs 是几十 MB 与本机状态，都不属于镜像。
+target/
+logs/
+uploads/
+run*.log
+*.iml
+.idea/
+../frontend/node_modules/
+../frontend/dist/

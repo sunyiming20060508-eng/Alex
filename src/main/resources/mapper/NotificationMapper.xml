@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.linli.mapper.NotificationMapper">
+
+    <!-- 触发人信息一条 join 带出；from_user_id=0 的系统通知没有对应用户，left join 让昵称留空而不是丢整行 -->
+    <sql id="withFrom">
+        n.id, n.user_id, n.from_user_id, n.type, n.target_id, n.summary, n.is_read, n.create_time,
+        u.nick_name as from_name, u.icon as from_icon
+    </sql>
+
+    <sql id="byUser">
+        from notification n
+        left join user u on u.id = n.from_user_id
+        where n.user_id = #{userId}
+        <if test="unreadOnly">and n.is_read = 0</if>
+    </sql>
+
+    <select id="pageByUser" resultType="com.linli.entity.Notification">
+        select <include refid="withFrom"/>
+        <include refid="byUser"/>
+        order by n.id desc
+        limit #{offset}, #{limit}
+    </select>
+
+    <select id="countByUser" resultType="long">
+        select count(*)
+        <include refid="byUser"/>
+    </select>
+
+</mapper>

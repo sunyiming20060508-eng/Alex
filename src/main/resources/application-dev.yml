@@ -1,0 +1,19 @@
+# 本地开发：验证码打进日志、健康检查吐依赖细节、Service 层开 debug 方便看缓存命中。
+linli:
+  auth:
+    log-code: true
+  cors:
+    # 前端 Vite 开发服务器；生产走 Nginx 同源，不需要
+    allowed-origins: http://localhost:5173,http://127.0.0.1:5173
+
+management:
+  endpoint:
+    health:
+      # 开发时把 db/redis 每一项都列出来，排查连不上哪个依赖最有用
+      show-details: always
+
+logging:
+  level:
+    # 打开这一层才能看到"商家详情缓存命中"这类调试日志；SQL 日志（com.linli.mapper）保持默认，
+    # 需要排查语句时再单独开 debug，否则控制台会被每条查询刷满。
+    com.linli.service: debug

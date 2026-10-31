@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.linli.mapper.ReviewMapper">
+
+    <!--
+      评价人信息和商家名一条 join 带出来；getById 和分页共用，保证"发出去的响应"和"列表里看到的"同构。
+      status 也一起带：用户端读路径已经按 status=1 过滤，带出来只是为了管理台和回读时不用再查一次。
+    -->
+    <sql id="withAuthor">
+        r.id, r.user_id, r.shop_id, r.order_id, r.content, r.score, r.images, r.status, r.create_time,
+        u.nick_name as author_name, u.icon as author_icon, s.name as shop_name
+    </sql>
+
+    <sql id="fromJoin">
+        from review r
+        left join user u on u.id = r.user_id
+        left join shop s on s.id = r.shop_id
+    </sql>
+
+    <select id="getById" resultType="com.linli.entity.Review">
+        select <include refid="withAuthor"/>
+        <include refid="fromJoin"/>
+        where r.id = #{id}
+    </select>
+
+    <!-- 用户端只看得到已通过的评价：驳回的那条对普通用户来说"不存在"，但行还在库里。 -->
+    <select id="pageByShop" resultType="com.linli.entity.Review">
+        select <include refid="withAuthor"/>
+        <include refid="fromJoin"/>
+        where r.shop_id = #{shopId} and r.status = 1
+        order by r.id desc
+        limit #{offset}, #{limit}
+    </select>
+
+    <select id="countByShop" resultType="long">
+        select count(*) from review where shop_id = #{shopId} and status = 1
+    </select>
+
+    <!-- 管理台：状态是筛选条件而不是硬编码，所以"看已驳回的"和"看全部"用的是同一条。 -->
+    <select id="pageAdmin" parameterType="com.linli.dto.AdminReviewQueryDTO" resultType="com.linli.entity.Review">
+        select <include refid="withAuthor"/>
+        <include refid="fromJoin"/>
+        <where>
+            <if test="status != null">and r.status = #{status}</if>
+            <if test="shopId != null">and r.shop_id = #{shopId}</if>
+            <if test="keyword != null">and r.content like concat('%', #{keyword}, '%')</if>
+        </where>
+        order by r.id desc
+        limit #{offset}, #{limit}
+    </select>
+
+    <select id="countAdmin" parameterType="com.linli.dto.AdminReviewQueryDTO" resultType="long">
+        select count(*) from review r
+        <where>
+            <if test="status != null">and r.status = #{status}</if>
+            <if test="shopId != null">and r.shop_id = #{shopId}</if>
+            <if test="keyword != null">and r.content like concat('%', #{keyword}, '%')</if>
+        </where>
+    </select>
+
+    <select id="listReviewedOrderIds" resultType="long">
+        select order_id from review
+        where user_id = #{userId}
+          and order_id in
+        <foreach collection="orderIds" item="id" open="(" separator="," close=")">#{id}</foreach>
+    </select>
+
+
+    <!-- 我写的评价：作者本人要看得到被驳回的那条，所以这里**不**按 status 过滤。 -->
+    <select id="pageByUser" resultType="com.linli.entity.Review">
+        select <include refid="withAuthor"/>
+        <include refid="fromJoin"/>
+        where r.user_id = #{userId}
+        order by r.id desc
+        limit #{offset}, #{limit}
+    </select>
+
+    <select id="countByUser" resultType="long">
+        select count(*) from review where user_id = #{userId}
+    </select>
+</mapper>

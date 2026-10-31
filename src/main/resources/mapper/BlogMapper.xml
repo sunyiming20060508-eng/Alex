@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.linli.mapper.BlogMapper">
+
+    <!--
+      列表查询：作者名、商家名一条 join 带出来，liked 用 exists 子查询算——
+      这样一页只发一条 SQL，不会为每条笔记再查一次"我点过没"。
+    -->
+    <select id="pageQuery" parameterType="com.linli.dto.BlogPageQueryDTO" resultType="com.linli.entity.Blog">
+        select b.id, b.user_id, b.shop_id, b.title, b.content, b.cover, b.like_count,
+               b.comment_count, b.status, b.create_time, b.update_time,
+               u.nick_name as author_name, u.icon as author_icon, s.name as shop_name,
+               <if test="userId != null">
+               exists(select 1 from blog_like l where l.blog_id = b.id and l.user_id = #{userId}) as liked
+               </if>
+               <if test="userId == null">0 as liked</if>
+        from blog b
+        left join user u on u.id = b.user_id
+        left join shop s on s.id = b.shop_id
+        where b.status = 1
+        <if test="authorId != null">and b.user_id = #{authorId}</if>
+        <if test="shopId != null">and b.shop_id = #{shopId}</if>
+        order by b.create_time desc, b.id desc
+        limit #{offset}, #{limit}
+    </select>
+
+    <select id="countQuery" parameterType="com.linli.dto.BlogPageQueryDTO" resultType="long">
+        select count(*) from blog b
+        where b.status = 1
+        <if test="authorId != null">and b.user_id = #{authorId}</if>
+        <if test="shopId != null">and b.shop_id = #{shopId}</if>
+    </select>
+
+    <!--
+      管理台分页：和 pageQuery 差在两件事——
+      ① status 是筛选条件而不是硬编码为 1（要能翻出"已经下架的"才能恢复它）；
+      ② 不算 liked（管理员不点赞，那个 exists 子查询在这里纯属浪费）。
+      关键词只搜标题和正文，不搜商家名：那是商家管理页该干的事。
+    -->
+    <select id="pageAdmin" parameterType="com.linli.dto.AdminBlogQueryDTO" resultType="com.linli.entity.Blog">
+        select b.id, b.user_id, b.shop_id, b.title, b.content, b.cover, b.like_count,
+               b.comment_count, b.status, b.create_time, b.update_time,
+               u.nick_name as author_name, u.icon as author_icon, s.name as shop_name
+        from blog b
+        left join user u on u.id = b.user_id
+        left join shop s on s.id = b.shop_id
+        <where>
+            <if test="status != null">and b.status = #{status}</if>
+            <if test="authorId != null">and b.user_id = #{authorId}</if>
+            <if test="keyword != null">
+                and (b.title like concat('%', #{keyword}, '%') or b.content like concat('%', #{keyword}, '%'))
+            </if>
+        </where>
+        order by b.create_time desc, b.id desc
+        limit #{offset}, #{limit}
+    </select>
+
+    <select id="countAdmin" parameterType="com.linli.dto.AdminBlogQueryDTO" resultType="long">
+        select count(*) from blog b
+        <where>
+            <if test="status != null">and b.status = #{status}</if>
+            <if test="authorId != null">and b.user_id = #{authorId}</if>
+            <if test="keyword != null">
+                and (b.title like concat('%', #{keyword}, '%') or b.content like concat('%', #{keyword}, '%'))
+            </if>
+        </where>
+    </select>
+
+    <!-- 关注 Feed 回源重建：只要 id、作者和发布时间（当 ZSet 的 score 用），不拉正文。 -->
+    <select id="listRecentByAuthors" resultType="com.linli.entity.Blog">
+        select b.id, b.user_id, b.create_time
+        from blog b
+        where b.status = 1
+        and b.user_id in
+        <foreach collection="authorIds" item="author" open="(" separator="," close=")">
+            #{author}
+        </foreach>
+        order by b.create_time desc, b.id desc
+        limit #{limit}
+    </select>
+
+    <!-- 关注 Feed：ZSet 里只有 id，正文、作者和"我点过没"按这一批 id 一次查回来。 -->
+    <select id="listByIds" resultType="com.linli.entity.Blog">
+        select b.id, b.user_id, b.shop_id, b.title, b.content, b.cover, b.like_count,
+               b.comment_count, b.status, b.create_time, b.update_time,
+               u.nick_name as author_name, u.icon as author_icon, s.name as shop_name,
+               <if test="userId != null">
+               exists(select 1 from blog_like l where l.blog_id = b.id and l.user_id = #{userId}) as liked
+               </if>
+               <if test="userId == null">0 as liked</if>
+        from blog b
+        left join user u on u.id = b.user_id
+        left join shop s on s.id = b.shop_id
+        where b.status = 1
+        and b.id in
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
+
+    <!--
+      我发的笔记：列和 pageAdmin 一样，条件从"管理员按状态筛"换成"只按作者"，
+      并且**不过滤 status**——被下架的那条本人必须看得见，否则他的感受只有"我写的东西凭空消失了"。
+    -->
+    <select id="pageMine" resultType="com.linli.entity.Blog">
+        select b.id, b.user_id, b.shop_id, b.title, b.content, b.cover, b.like_count,
+               b.comment_count, b.status, b.create_time, b.update_time,
+               u.nick_name as author_name, u.icon as author_icon, s.name as shop_name
+        from blog b
+                 left join user u on u.id = b.user_id
+                 left join shop s on s.id = b.shop_id
+        where b.user_id = #{userId}
+        order by b.create_time desc, b.id desc
+        limit #{offset}, #{limit}
+    </select>
+
+    <select id="countMine" resultType="long">
+        select count(*) from blog where user_id = #{userId}
+    </select>
+</mapper>

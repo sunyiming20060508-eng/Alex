@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.linli.mapper.CouponMapper">
+
+    <!--
+      received 是"当前登录用户是否已领过"，用 exists 子查询实时算，不参与任何缓存：
+      它是按人而异的状态，缓存下来就会把别人的领取结果显示给这个用户。
+      未登录时不查子查询，直接给 0。
+    -->
+    <sql id="couponColumns">
+        c.*, s.name as shop_name,
+        <choose>
+            <when test="userId != null">
+                exists(select 1 from user_coupon uc where uc.coupon_id = c.id and uc.user_id = #{userId}) as received
+            </when>
+            <otherwise>0 as received</otherwise>
+        </choose>
+    </sql>
+
+    <!-- 可领取 = 上架 且 当前时间在 [begin_time, end_time] 区间内 -->
+    <sql id="availableWhere">
+        where c.status = 1 and c.begin_time &lt;= now() and c.end_time &gt;= now()
+        <if test="shopId != null">and c.shop_id = #{shopId}</if>
+    </sql>
+
+    <select id="pageQuery" resultType="com.linli.entity.Coupon">
+        select <include refid="couponColumns"/>
+        from coupon c
+        left join shop s on s.id = c.shop_id
+        <include refid="availableWhere"/>
+        order by c.end_time asc, c.id asc
+        limit #{offset}, #{limit}
+    </select>
+
+    <!-- count 和列表必须共用同一段 where，否则总数和内容会对不上。 -->
+    <select id="countQuery" resultType="long">
+        select count(*)
+        from coupon c
+        <include refid="availableWhere"/>
+    </select>
+
+    <select id="listByShop" resultType="com.linli.entity.Coupon">
+        select <include refid="couponColumns"/>
+        from coupon c
+        left join shop s on s.id = c.shop_id
+        where c.status = 1 and c.shop_id = #{shopId}
+          and c.begin_time &lt;= now() and c.end_time &gt;= now()
+        order by c.amount desc, c.id asc
+        limit 20
+    </select>
+</mapper>

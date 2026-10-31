@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.linli.mapper.ShopMapper">
+
+    <sql id="shopColumns">
+        s.id, s.name, s.category_id, s.area, s.city, s.score, s.min_price, s.distance, s.tag,
+        s.cover, s.address, s.business_hours, s.status, s.create_time, s.update_time,
+        c.name as category_name
+    </sql>
+
+    <!-- 列表和计数共用同一套条件，避免出现"总数有 8 条、列表只回 6 条"这种对不上的分页。 -->
+    <sql id="pageWhere">
+        <where>
+            s.status = 1
+            <if test="categoryId != null">and s.category_id = #{categoryId}</if>
+            <if test="city != null">and s.city = #{city}</if>
+            <if test="keyword != null">
+                and (s.name like concat('%', #{keyword}, '%') or c.name like concat('%', #{keyword}, '%'))
+            </if>
+        </where>
+    </sql>
+
+    <select id="pageQuery" resultType="com.linli.entity.Shop">
+        select
+        <include refid="shopColumns"/>
+        from shop s
+        left join category c on c.id = s.category_id
+        <include refid="pageWhere"/>
+        <!--
+          排序分支写死在这里：Service 已经把 sort 收敛到 distance/score/price 三个值，
+          列名不出现在参数里，所以没有拼接注入面。距离用 distance_meters（V12 加的数值列），
+          "上门服务"那类没有距离的先排到最后，而不是被当成 0 米插到最前面。
+        -->
+        <choose>
+            <when test="sort == 'distance'">order by s.distance_meters is null, s.distance_meters asc, s.id asc</when>
+            <when test="sort == 'price'">order by s.min_price asc, s.id asc</when>
+            <otherwise>order by s.score desc, s.id asc</otherwise>
+        </choose>
+        limit #{offset}, #{limit}
+    </select>
+
+    <select id="countQuery" resultType="long">
+        select count(*)
+        from shop s
+        left join category c on c.id = s.category_id
+        <include refid="pageWhere"/>
+    </select>
+
+    <!-- 详情不过滤 status：已休息的商家仍然能看，只是 openStatus 返回 CLOSED。 -->
+    <select id="getById" resultType="com.linli.entity.Shop">
+        select
+        <include refid="shopColumns"/>
+        from shop s
+        left join category c on c.id = s.category_id
+        where s.id = #{id}
+    </select>
+
+    <!-- 收藏列表这类"顺序在别的表里"的读法：一次把整行取回，Service 按传入顺序装配。 -->
+    <select id="listByIds" resultType="com.linli.entity.Shop">
+        select
+        <include refid="shopColumns"/>
+        from shop s
+        left join category c on c.id = s.category_id
+        where s.id in
+        <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+    </select>
+
+    <!-- 唯一一处 shop 写语句：评价之后把展示分重算成平均分。调用方负责删详情缓存。 -->
+    <update id="updateScore">
+        update shop set score = #{score} where id = #{id}
+    </update>
+
+</mapper>

@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.linli.mapper.OrderMapper">
+
+    <sql id="orderColumns">
+        o.*, s.name as shop_name
+    </sql>
+
+    <!-- useGeneratedKeys 回填主键：明细紧接着要用这个 id，省掉一次回查。
+         create_time 由 Service 显式写入，好让下单响应里就带上时间，而不是等下一次查询才有。 -->
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into orders (number, verify_code, expire_time, user_id, shop_id, total_amount, consignee,
+                            phone, address, remark, user_coupon_id, discount_amount, pay_amount, pay_status,
+                            status, create_time)
+        values (#{number}, #{verifyCode}, #{expireTime}, #{userId}, #{shopId}, #{totalAmount}, #{consignee},
+                #{phone}, #{address}, #{remark}, #{userCouponId}, #{discountAmount}, #{payAmount}, #{payStatus},
+                #{status}, #{createTime})
+    </insert>
+
+    <!-- 归属条件写在 SQL 里：查别人的单就是查不到，不依赖上层记得判断 -->
+    <select id="getByIdAndUser" resultType="com.linli.entity.Order">
+        select <include refid="orderColumns"/>
+        from orders o
+        left join shop s on s.id = o.shop_id
+        where o.id = #{id} and o.user_id = #{userId}
+    </select>
+
+    <sql id="ownerWhere">
+        where o.user_id = #{userId}
+        <if test="status != null">and o.status = #{status}</if>
+    </sql>
+
+    <select id="pageQuery" resultType="com.linli.entity.Order">
+        select <include refid="orderColumns"/>
+        from orders o
+        left join shop s on s.id = o.shop_id
+        <include refid="ownerWhere"/>
+        order by o.create_time desc, o.id desc
+        limit #{offset}, #{limit}
+    </select>
+
+    <!-- count 和列表共用同一段条件，否则分页总数会和实际内容对不上 -->
+    <select id="countQuery" resultType="long">
+        select count(*)
+        from orders o
+        <include refid="ownerWhere"/>
+    </select>
+
+    <!--
+      守卫式 UPDATE：前置状态和归属都写进 where，影响行数 0 就是"不该改"。
+      校验与写入合成一步，重复点支付/重复取消不会改成功，也不会泄露"这单是不是别人的"。
+    -->
+    <update id="updateStatusWithGuard">
+        update orders
+        <set>
+            <if test="order.status != null">status = #{order.status},</if>
+            <if test="order.payStatus != null">pay_status = #{order.payStatus},</if>
+            <if test="order.payMethod != null">pay_method = #{order.payMethod},</if>
+            <if test="order.payTime != null">pay_time = #{order.payTime},</if>
+            <if test="order.cancelReason != null">cancel_reason = #{order.cancelReason},</if>
+            <if test="order.cancelTime != null">cancel_time = #{order.cancelTime},</if>
+            <if test="order.completeTime != null">complete_time = #{order.completeTime},</if>
+            <if test="order.refundTime != null">refund_time = #{order.refundTime},</if>
+        </set>
+        where id = #{order.id}
+          and user_id = #{userId}
+          and status in
+        <foreach collection="expectStatusList" item="st" open="(" separator="," close=")">
+            #{st}
+        </foreach>
+    </update>
+
+    <!-- 超时未支付的订单 id：走 idx_orders_status_create，不循环单条查 -->
+    <select id="listTimeoutIds" resultType="long">
+        select id from orders
+        where status = #{pendingStatus}
+          and create_time &lt; #{deadline}
+    </select>
+
+    <!-- 批量取消，条件里仍带前置状态：这一瞬间刚被用户支付的单不会被误关 -->
+    <update id="cancelByIds">
+        update orders
+        set status = #{cancelledStatus},
+            cancel_reason = #{reason},
+            cancel_time = now(),
+            update_time = now()
+        where status = #{pendingStatus}
+          and id in
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </update>
+</mapper>

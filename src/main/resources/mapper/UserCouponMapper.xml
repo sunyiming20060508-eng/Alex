@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.linli.mapper.UserCouponMapper">
+
+    <!-- 我的优惠券：status 为空表示全部；快过期的排前面，符合使用习惯。 -->
+    <select id="listByUser" resultType="com.linli.entity.UserCoupon">
+        select uc.*, s.name as shop_name
+        from user_coupon uc
+        left join shop s on s.id = uc.shop_id
+        where uc.user_id = #{userId}
+        <if test="status != null">and uc.status = #{status}</if>
+        order by uc.expire_time asc, uc.id desc
+    </select>
+
+    <select id="getByIdAndUser" resultType="com.linli.entity.UserCoupon">
+        select uc.*, s.name as shop_name
+        from user_coupon uc
+        left join shop s on s.id = uc.shop_id
+        where uc.id = #{id} and uc.user_id = #{userId}
+    </select>
+
+    <!-- 守卫式核销：状态和归属都写进 where，并发下同一张券只会被一单用掉 -->
+    <update id="markUsed">
+        update user_coupon
+        set status = 2, use_time = now(), order_id = #{orderId}
+        where id = #{id} and user_id = #{userId} and status = 1
+    </update>
+
+    <!--
+      取消 / 超时 / 退款都要把券还回去，但**只有"这单确实已经不在成交路径上"才还**。
+      join orders 带前置状态是刻意的：从"查出这批单"到"改状态"之间用户可能刚好付款成功，
+      那一单的订单行还是待使用，券却会被这句翻回可用——用户既拿到折扣又白得一张券，是资损。
+      和 GoodsMapper.restoreStockByOrderIds 用同一套守卫形状，两处不该各写各的严格程度。
+    -->
+    <update id="releaseByOrderIds">
+        update user_coupon uc
+        join orders o on o.id = uc.order_id
+        set uc.status = 1, uc.use_time = null, uc.order_id = null
+        where uc.status = 2
+          and o.status = #{expectStatus}
+          and uc.order_id in
+        <foreach collection="orderIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </update>
+</mapper>

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  日志落地 + 滚动 + traceId。
+
+  为什么不再只往控制台打：控制台是被 IDE 抓住的，进程一崩历史就没了，
+  "昨晚那次 500 到底发生了什么"无从查起——这是可观测性的最低门槛。
+  文件按天 + 按大小双维度切，14 天 / 200MB 封顶，本地开发也不会把盘写满。
+
+  pattern 里的 [trace=%X{traceId}] 是这份配置存在的核心理由：
+  一次请求常打三行日志（会话解析、缓存命中、写路径成功），没有关联 id 只能靠时间戳猜哪几行是同一单。
+  阶段 7 拆微服务时同一条 traceId 要跨服务透传，所以约定现在就得先立起来。
+
+  两个 appender 都强制 UTF-8：Windows 控制台默认 GBK，中文日志会写成乱码，
+  而乱码的日志等于没有日志（文件也一起按 UTF-8 落，方便 grep）。
+-->
+<configuration>
+    <property name="LOG_DIR" value="${LOG_DIR:-logs}"/>
+    <property name="PATTERN"
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] [trace=%X{traceId:-}] %logger{36} - %msg%n"/>
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIR}/life-service.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/life-service.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>10MB</maxFileSize>
+            <maxHistory>14</maxHistory>
+            <totalSizeCap>200MB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>${PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <root level="info">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </root>
+</configuration>
